@@ -13,7 +13,12 @@ func Repos(org string) ([]string, error) {
 
 	client := github.NewClient(nil)
 
-	opt := &github.RepositoryListByOrgOptions{Type: "public"}
+	opt := &github.RepositoryListByOrgOptions{
+		Type: "public",
+		ListOptions: github.ListOptions{
+			PerPage: 100, // hard code for POC
+		},
+	}
 	repos, _, err := client.Repositories.ListByOrg(ctx, org, opt)
 	if err != nil {
 		logger.Error("list repos", zap.Error(err))

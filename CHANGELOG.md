@@ -7,4 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/beyondstorage/go-endpoint/compare/v1.0.0...HEAD
+## v0.1.0 - 2021-06-30
+
+- Hello, world!
+
+[Unreleased]: https://github.com/beyondstorage/go-community/compare/v1.0.0...HEAD

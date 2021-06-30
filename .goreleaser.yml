@@ -2,21 +2,23 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - env:
+  - id: "default"
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
-      - darwin
     main: ./cmd/community
-    binary: bin/community
+    binary: community
 archives:
-  - replacements:
+  - builds:
+      - default
+    replacements:
       darwin: darwin
       linux: linux
       windows: windows
       386: i386
       amd64: x86_64
+    name_template: "community_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 release:
   github:
     owner: beyondstorage

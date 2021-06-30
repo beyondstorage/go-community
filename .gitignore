@@ -22,4 +22,4 @@ coverage.*
 tests/*.yaml
 
 Makefile.env
-sessionfile
+sessionfiledist/

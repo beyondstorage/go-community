@@ -1,0 +1,8 @@
+[specs]
+repos = [
+    "specs"
+]
+[specs.members]
+leader = [
+    "example"
+]

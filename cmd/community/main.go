@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -11,13 +10,8 @@ import (
 var app = &cli.App{
 	Name:  "community",
 	Usage: "community tools for open source society",
-	Action: func(c *cli.Context) error {
-		fmt.Println("boom! I say!")
-		return nil
-	},
 	Commands: []*cli.Command{
-		generateCmd,
-		syncCmd,
+		teamCmd,
 	},
 }
 

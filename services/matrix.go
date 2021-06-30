@@ -1,4 +1,4 @@
-package room
+package services
 
 import (
 	"errors"

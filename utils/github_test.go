@@ -8,14 +8,14 @@ import (
 	"github.com/beyondstorage/go-community/room"
 )
 
-func TestProjects(t *testing.T) {
+func testProjects(t *testing.T) {
 	_, err := Repos(os.Getenv(env.GithubOwner))
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestSync(t *testing.T) {
+func testSync(t *testing.T) {
 	rs, err := Repos(os.Getenv(env.GithubOwner))
 	if err != nil {
 		t.Fatal(err)

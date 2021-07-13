@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/beyondstorage/go-community/env"
-	"github.com/beyondstorage/go-community/services"
+	"strings"
+
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
-	"strings"
+
+	"github.com/beyondstorage/go-community/env"
+	"github.com/beyondstorage/go-community/services"
 )
 
 var reportCmd = &cli.Command{

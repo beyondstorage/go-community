@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-github/v35/github"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
-	"github.com/google/go-github/v35/github"
 
 	"github.com/beyondstorage/go-community/model"
 )

@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+
+	"github.com/urfave/cli/v2"
+
 	"github.com/beyondstorage/go-community/env"
 	"github.com/beyondstorage/go-community/model"
 	"github.com/beyondstorage/go-community/services"
-	"github.com/urfave/cli/v2"
 )
 
 var teamCmd = &cli.Command{

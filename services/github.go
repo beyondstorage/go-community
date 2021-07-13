@@ -3,13 +3,15 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/beyondstorage/go-community/model"
-	"github.com/google/go-github/v35/github"
-	"go.uber.org/zap"
-	"golang.org/x/oauth2"
 	"sort"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
+	"golang.org/x/oauth2"
+	"github.com/google/go-github/v35/github"
+
+	"github.com/beyondstorage/go-community/model"
 )
 
 var (

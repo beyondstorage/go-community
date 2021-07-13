@@ -12,6 +12,7 @@ var app = &cli.App{
 	Usage: "community tools for open source society",
 	Commands: []*cli.Command{
 		teamCmd,
+		reportCmd,
 	},
 }
 

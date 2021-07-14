@@ -220,6 +220,17 @@ func (g *Github) CreateWeeklyReportIssue(ctx context.Context, repo, content stri
 	return issue.GetHTMLURL(), nil
 }
 
+func (g *Github) CreateIssue(ctx context.Context, repo, title, content string) (issueURL string, err error) {
+	issue, _, err := g.client.Issues.Create(ctx, g.owner, repo, &github.IssueRequest{
+		Title: github.String(title),
+		Body:  github.String(content),
+	})
+	if err != nil {
+		return
+	}
+	return issue.GetHTMLURL(), nil
+}
+
 func (g *Github) listTeams(ctx context.Context) (teams map[string]*github.Team, err error) {
 	opt := &github.ListOptions{
 		PerPage: 100,

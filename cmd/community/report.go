@@ -81,7 +81,7 @@ var reportWeeklyCmd = &cli.Command{
 		statistics := make([]model.Statistic, 0, len(repos))
 
 		for _, v := range repos {
-			content, users, stat, err := g.GenerateReport(ctx, c.String("owner"), v)
+			content, users, stat, err := g.GenerateReportDataByRepo(ctx, c.String("owner"), v)
 			if err != nil {
 				return nil
 			}

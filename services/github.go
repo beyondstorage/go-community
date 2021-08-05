@@ -139,7 +139,7 @@ func (g *Github) SyncTeam(ctx context.Context, teams model.Teams) (err error) {
 	return
 }
 
-func (g *Github) GenerateReport(ctx context.Context, org, repo string) (
+func (g *Github) GenerateReportDataByRepo(ctx context.Context, org, repo string) (
 	content string, users map[string]bool, stat model.Statistic, err error) {
 	users = make(map[string]bool)
 	events, err := g.listEvents(ctx, org, repo)

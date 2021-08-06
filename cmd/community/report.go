@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/beyondstorage/go-community/env"
+	"github.com/beyondstorage/go-community/model"
 	"github.com/beyondstorage/go-community/services"
 )
 
@@ -55,6 +56,11 @@ var reportWeeklyCmd = &cli.Command{
 	Action: func(c *cli.Context) error {
 		logger, _ := zap.NewDevelopment()
 
+		if c.String("type") != "issue" {
+			logger.Error("not supported report type", zap.String("type", c.String("type")))
+			return errors.New("not supported type")
+		}
+
 		g, err := services.NewGithub(
 			c.String("owner"),
 			c.String("token"))
@@ -71,20 +77,44 @@ var reportWeeklyCmd = &cli.Command{
 
 		b := &strings.Builder{}
 
+		usernameDict := make(map[string]bool)
+		statistics := make([]model.Statistic, 0, len(repos))
+
 		for _, v := range repos {
-			content, err := g.GenerateReport(ctx, c.String("owner"), v)
+			content, users, stat, err := g.GenerateReportDataByRepo(ctx, c.String("owner"), v)
 			if err != nil {
 				return nil
 			}
+
+			// skip generate content for repo whose statistic is blank
+			if stat.IsBlank() {
+				continue
+			}
+
+			// aggregate statistic data
+			statistics = append(statistics, stat)
+
+			// merge users into dict
+			for name, exist := range users {
+				usernameDict[name] = exist
+			}
+
 			b.WriteString(content)
 		}
 
-		if c.String("type") != "issue" {
-			logger.Error("not supported report type", zap.String("type", c.String("type")))
-			return errors.New("not supported type")
+		// sum statistics as the result
+		resStat := model.Statistics(statistics).Sum()
+
+		// append users link after report content
+		for username, _ := range usernameDict {
+			// ## [@username]: https://github.com/username
+			b.WriteString(fmt.Sprintf("[@%s]: https://github.com/%s\n", username, username))
 		}
 
-		url, err := g.CreateWeeklyReportIssue(ctx, c.String("output"), b.String())
+		// print statistics before report content
+		result := fmt.Sprintf("%s\n%s\n", resStat.FormatPrint(), b.String())
+
+		url, err := g.CreateWeeklyReportIssue(ctx, c.String("output"), result)
 		if err != nil {
 			return err
 		}

@@ -139,10 +139,12 @@ func (g *Github) SyncTeam(ctx context.Context, teams model.Teams) (err error) {
 	return
 }
 
-func (g *Github) GenerateReport(ctx context.Context, org, repo string) (content string, err error) {
+func (g *Github) GenerateReportDataByRepo(ctx context.Context, org, repo string) (
+	content string, users map[string]bool, stat model.Statistic, err error) {
+	users = make(map[string]bool)
 	events, err := g.listEvents(ctx, org, repo)
 	if err != nil {
-		return "", err
+		return "", users, stat, err
 	}
 
 	b := &strings.Builder{}
@@ -151,23 +153,32 @@ func (g *Github) GenerateReport(ctx context.Context, org, repo string) (content 
 	b.WriteString(fmt.Sprintf("## [%s](https://github.com/%s/%s)\n\n", repo, org, repo))
 
 	for _, v := range events {
-		typ := v.GetType()
+		// skip events committed by bot
+		if g.isBot(v.GetActor()) {
+			continue
+		}
+		// add user info into dict
+		users[v.GetActor().GetLogin()] = true
 
 		raw, err := v.ParsePayload()
 		if err != nil {
-			return "", err
+			return "", users, stat, err
 		}
-		switch typ {
+		switch v.GetType() {
 		case "IssuesEvent":
 			e := raw.(*github.IssuesEvent)
 			switch e.GetAction() {
 			case "opened":
-				b.WriteString(fmt.Sprintf("- @%s opened issue %s\n",
+				stat.CountIssueOpen()
+				b.WriteString(fmt.Sprintf("- [@%s] opened issue [%s](%s)\n",
 					v.GetActor().GetLogin(),
+					e.GetIssue().GetTitle(),
 					e.GetIssue().GetHTMLURL()))
 			case "closed":
-				b.WriteString(fmt.Sprintf("- @%s closed issue %s\n",
+				stat.CountIssueClose()
+				b.WriteString(fmt.Sprintf("- [@%s] closed issue [%s](%s)\n",
 					v.GetActor().GetLogin(),
+					e.GetIssue().GetTitle(),
 					e.GetIssue().GetHTMLURL()))
 			default:
 				g.logger.Info("ignore issue",
@@ -179,17 +190,22 @@ func (g *Github) GenerateReport(ctx context.Context, org, repo string) (content 
 			e := raw.(*github.PullRequestEvent)
 			switch e.GetAction() {
 			case "opened":
-				b.WriteString(fmt.Sprintf("- @%s opened pull request %s\n",
+				stat.CountPROpen()
+				b.WriteString(fmt.Sprintf("- [@%s] opened pull request [%s](%s)\n",
 					v.GetActor().GetLogin(),
+					e.GetPullRequest().GetTitle(),
 					e.GetPullRequest().GetHTMLURL()))
 			case "closed":
+				stat.CountPRClose()
 				if e.GetPullRequest().GetMerged() {
-					b.WriteString(fmt.Sprintf("- @%s merged pull request %s\n",
+					b.WriteString(fmt.Sprintf("- [@%s] merged pull request [%s](%s)\n",
 						v.GetActor().GetLogin(),
+						e.GetPullRequest().GetTitle(),
 						e.GetPullRequest().GetHTMLURL()))
 				} else {
-					b.WriteString(fmt.Sprintf("- @%s closed pull request %s\n",
+					b.WriteString(fmt.Sprintf("- [@%s] closed pull request [%s](%s)\n",
 						v.GetActor().GetLogin(),
+						e.GetPullRequest().GetTitle(),
 						e.GetPullRequest().GetHTMLURL()))
 				}
 			default:
@@ -206,7 +222,7 @@ func (g *Github) GenerateReport(ctx context.Context, org, repo string) (content 
 	// Add trailing empty line.
 	b.WriteString("\n")
 
-	return b.String(), nil
+	return b.String(), users, stat, nil
 }
 
 func (g *Github) CreateWeeklyReportIssue(ctx context.Context, repo, content string) (issueURL string, err error) {
@@ -357,4 +373,14 @@ func (g *Github) setupTeams(ctx context.Context, teams model.Teams) (err error) 
 		}
 	}
 	return nil
+}
+
+func (g *Github) isBot(user *github.User) bool {
+	switch user.GetLogin() {
+	// for now, we introduced three bot
+	case "dependabot[bot]", "github-actions[bot]", "BeyondRobot":
+		return true
+	default:
+		return false
+	}
 }

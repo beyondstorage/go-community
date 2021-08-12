@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2021-08-12
+
+### Added
+
+- cmd: Add tracking support ([#13](https://github.com/beyondstorage/go-community/pull/13))
+
+### Modified
+
+- weekly-report: Refactor weekly report content style ([#18](https://github.com/beyondstorage/go-community/pull/18))
+
 ## [v0.2.0] - 2021-07-13
 
 ### Added
@@ -19,3 +29,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 [Unreleased]: https://github.com/beyondstorage/go-community/compare/v0.2.0...HEAD
 [v0.2.0]: https://github.com/beyondstorage/go-community/compare/v0.1.0...v0.2.0
+[v0.3.0]: https://github.com/beyondstorage/go-community/compare/v0.2.0...v0.3.0

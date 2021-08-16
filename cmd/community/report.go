@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -75,6 +76,7 @@ var reportWeeklyCmd = &cli.Command{
 			return err
 		}
 
+		sort.Strings(repos)
 		b := &strings.Builder{}
 
 		usernameDict := make(map[string]bool)

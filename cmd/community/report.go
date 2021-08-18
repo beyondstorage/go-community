@@ -71,7 +71,7 @@ var reportWeeklyCmd = &cli.Command{
 
 		ctx := context.Background()
 
-		repos, err := g.ListRepos(ctx, c.String("owner"))
+		repos, err := g.ListRepos(ctx)
 		if err != nil {
 			return err
 		}

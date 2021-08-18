@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gobwas/glob"
 	"github.com/google/go-github/v35/github"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -16,7 +17,7 @@ import (
 
 var (
 	permissionMap = map[model.Role]string{
-		model.RoleLeader:      "admin",
+		model.RoleAdmin:       "admin",
 		model.RoleMaintainer:  "maintain",
 		model.RoleCommitter:   "push",
 		model.RoleReviewer:    "triage",
@@ -47,7 +48,7 @@ func NewGithub(owner, token string) (g *Github, err error) {
 	return
 }
 
-func (g *Github) ListRepos(ctx context.Context, org string) ([]string, error) {
+func (g *Github) ListRepos(ctx context.Context) ([]string, error) {
 	opt := &github.RepositoryListByOrgOptions{
 		Type: "public",
 		ListOptions: github.ListOptions{
@@ -57,7 +58,7 @@ func (g *Github) ListRepos(ctx context.Context, org string) ([]string, error) {
 
 	rs := make([]string, 0)
 	for {
-		repos, resp, err := g.client.Repositories.ListByOrg(ctx, org, opt)
+		repos, resp, err := g.client.Repositories.ListByOrg(ctx, g.owner, opt)
 		if err != nil {
 			g.logger.Error("list repos", zap.Error(err))
 			return nil, err
@@ -80,63 +81,220 @@ func (g *Github) ListRepos(ctx context.Context, org string) ([]string, error) {
 	return rs, nil
 }
 
-func (g *Github) SyncTeam(ctx context.Context, teams model.Teams) (err error) {
+func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, projects model.Projects, repos []string) (err error) {
 	err = g.setupTeams(ctx, teams)
 	if err != nil {
 		return
 	}
 
 	for tn, t := range teams {
-		for _, role := range model.ValidRoles {
-			slug := model.FormatTeamSlug(tn, role)
+		var teamRepos []string
+		if len(t.Repos) > 0 {
+			teamRepos = t.Repos
+		} else {
+			teamRepos = projects[t.Project].Repos
+		}
 
-			// Sync repos
-			for _, repo := range t.Repos {
-				_, err = g.client.Teams.AddTeamRepoBySlug(
-					ctx, g.owner, slug, g.owner, repo,
-					&github.TeamAddTeamRepoOptions{Permission: permissionMap[role]})
-				if err != nil {
-					return fmt.Errorf("add team repo by slug: %w", err)
-				}
-				g.logger.Info("Added repo into team",
-					zap.String("team", slug),
-					zap.String("repo", repo))
-			}
-			// Sync members
-			expectMembers := map[string]struct{}{}
-			for _, member := range t.Members[role] {
-				_, _, err = g.client.Teams.AddTeamMembershipBySlug(
-					ctx, g.owner, slug, member, nil)
-				if err != nil {
-					return fmt.Errorf("add team repo by slug: %w", err)
-				}
-
-				expectMembers[member] = struct{}{}
-
-				g.logger.Info("Added member into team",
-					zap.String("team", slug),
-					zap.String("member", member))
-			}
-			members, err := g.listTeamMembers(ctx, slug)
-			if err != nil {
-				return fmt.Errorf("list team members by slug: %w", err)
-			}
-			for _, member := range members {
-				if _, ok := expectMembers[member]; ok {
+		expectRepos := make(map[string]struct{})
+		// All repos in teamRepos is a glob, we should expand it.
+		for _, v := range teamRepos {
+			g := glob.MustCompile(v)
+			for _, v := range repos {
+				if !g.Match(v) {
 					continue
 				}
-				// Remove all members that not in expect members.
-				_, err = g.client.Teams.RemoveTeamMembershipBySlug(ctx, g.owner, slug, member)
-				if err != nil {
-					return fmt.Errorf("remove team member by slug: %w", err)
-				}
-				g.logger.Info("Removed member from team",
-					zap.String("team", slug),
-					zap.String("member", member))
+				expectRepos[v] = struct{}{}
 			}
+		}
+
+		existRepos := make(map[string]struct{})
+		opt := &github.ListOptions{
+			PerPage: 100,
+		}
+		for {
+			rps, resp, err := g.client.Teams.ListTeamReposBySlug(ctx, g.owner, tn, opt)
+			if err != nil {
+				g.logger.Error("list team repos", zap.Error(err))
+				return err
+			}
+			for _, v := range rps {
+				existRepos[v.GetName()] = struct{}{}
+			}
+			if resp.NextPage == 0 {
+				break
+			}
+			opt.Page = resp.NextPage
+		}
+
+		// Add repos that in expectRepos but not in existRepos.
+		for er := range expectRepos {
+			_, exist := existRepos[er]
+			if exist {
+				continue
+			}
+			_, err = g.client.Teams.AddTeamRepoBySlug(
+				ctx, g.owner, tn, g.owner, er,
+				&github.TeamAddTeamRepoOptions{Permission: permissionMap[t.Role]})
+			if err != nil {
+				return fmt.Errorf("add team repo by slug: %w", err)
+			}
+			g.logger.Info("Added repo into team",
+				zap.String("team", tn),
+				zap.String("repo", er))
+		}
+
+		// Delete repos that in existRepos but not in expectRepos.
+		for er := range existRepos {
+			_, exist := expectRepos[er]
+			if exist {
+				continue
+			}
+			_, err = g.client.Teams.RemoveTeamRepoBySlug(
+				ctx, g.owner, tn, g.owner, er)
+			if err != nil {
+				return fmt.Errorf("remove team repo by slug: %w", err)
+			}
+			g.logger.Info("Removed repo into team",
+				zap.String("team", tn),
+				zap.String("repo", er))
+		}
+
+		expectMembers := make(map[string]struct{})
+		for _, v := range t.Members {
+			expectMembers[v] = struct{}{}
+		}
+
+		existMembers := make(map[string]struct{})
+		teamopt := &github.TeamListTeamMembersOptions{
+			ListOptions: github.ListOptions{
+				PerPage: 100,
+			},
+		}
+		for {
+			rps, resp, err := g.client.Teams.ListTeamMembersBySlug(ctx, g.owner, tn, teamopt)
+			if err != nil {
+				g.logger.Error("list team members", zap.Error(err))
+				return err
+			}
+			for _, v := range rps {
+				existMembers[v.GetLogin()] = struct{}{}
+			}
+			if resp.NextPage == 0 {
+				break
+			}
+			teamopt.Page = resp.NextPage
+		}
+
+		// Add members that in expectMembers but not in existMembers.
+		for m := range expectMembers {
+			_, exist := existMembers[m]
+			if exist {
+				continue
+			}
+			_, _, err = g.client.Teams.AddTeamMembershipBySlug(
+				ctx, g.owner, tn, m, nil)
+			if err != nil {
+				return fmt.Errorf("add team member by slug: %w", err)
+			}
+			g.logger.Info("Added member into team",
+				zap.String("team", tn),
+				zap.String("member", m))
+		}
+
+		// Delete members that in existMembers but not in expectMembers.
+		for m := range existMembers {
+			_, exist := expectMembers[m]
+			if exist {
+				continue
+			}
+			_, err = g.client.Teams.RemoveTeamMembershipBySlug(
+				ctx, g.owner, tn, m)
+			if err != nil {
+				return fmt.Errorf("remove team member by slug: %w", err)
+			}
+			g.logger.Info("Removed member from team",
+				zap.String("team", tn),
+				zap.String("member", m))
 		}
 	}
 	return
+}
+
+func (g *Github) SyncContributors(ctx context.Context, teams model.Teams, repos []string) (err error) {
+	// All members in team.
+	teamMembers := make(map[string]struct{})
+	for _, team := range teams {
+		for _, v := range team.Members {
+			teamMembers[v] = struct{}{}
+		}
+	}
+
+	// All members in org.
+	existMembers := make(map[string]struct{})
+	opt := &github.ListMembersOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+	for {
+		rps, resp, err := g.client.Organizations.ListMembers(ctx, g.owner, opt)
+		if err != nil {
+			g.logger.Info("list team members", zap.Error(err))
+			return err
+		}
+		for _, v := range rps {
+			existMembers[v.GetLogin()] = struct{}{}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+
+	// A map about <Github Login> -> <Github ID>
+	expectMembers := make(map[string]int64)
+
+	// List all contributors
+	for _, repo := range repos {
+		opt := &github.ListContributorsOptions{
+			ListOptions: github.ListOptions{
+				PerPage: 100,
+			},
+		}
+		for {
+			contributors, resp, err := g.client.Repositories.ListContributors(ctx, g.owner, repo, opt)
+			if err != nil {
+				return fmt.Errorf("list contributors: %w", err)
+			}
+			for _, v := range contributors {
+				expectMembers[v.GetLogin()] = v.GetID()
+			}
+			if resp.NextPage == 0 {
+				break
+			}
+			opt.Page = resp.NextPage
+		}
+	}
+
+	// Add all members that not in org and team.
+	for v, id := range expectMembers {
+		_, exist := teamMembers[v]
+		if exist {
+			continue
+		}
+		_, exist = existMembers[v]
+		if exist {
+			continue
+		}
+		_, _, err = g.client.Organizations.CreateOrgInvitation(ctx, g.owner, &github.CreateOrgInvitationOptions{
+			InviteeID: github.Int64(id),
+			Role:      github.String("direct_member"),
+		})
+		if err != nil {
+			return fmt.Errorf("create invite: %w", err)
+		}
+	}
+	return nil
 }
 
 func (g *Github) GenerateReportDataByRepo(ctx context.Context, org, repo string) (
@@ -347,29 +505,27 @@ func (g *Github) listTeamMembers(ctx context.Context, team string) (users []stri
 
 func (g *Github) setupTeams(ctx context.Context, teams model.Teams) (err error) {
 	for teamName := range teams {
-		for _, role := range model.ValidRoles {
-			slug := teamName + "-" + role.String()
+		slug := teamName
 
-			_, resp, err := g.client.Teams.GetTeamBySlug(ctx, g.owner, slug)
-			if err == nil {
-				// The team is exist, we can continue to setup next team.
-				continue
-			}
+		_, resp, err := g.client.Teams.GetTeamBySlug(ctx, g.owner, slug)
+		if err == nil {
+			// The team is exist, we can continue to setup next team.
+			continue
+		}
 
-			if resp.StatusCode != 404 {
-				// This error is not a valid github error, return directly.
-				return fmt.Errorf("get team by slug %s: %v", slug, err)
-			}
+		if resp.StatusCode != 404 {
+			// This error is not a valid github error, return directly.
+			return fmt.Errorf("get team by slug %s: %v", slug, err)
+		}
 
-			privacy := "closed" // open to all team members.
-			// Now we can handle the create team logic.
-			_, _, err = g.client.Teams.CreateTeam(ctx, g.owner, github.NewTeam{
-				Name:    slug,
-				Privacy: &privacy,
-			})
-			if err != nil {
-				return fmt.Errorf("create team slug %s: %v", slug, err)
-			}
+		privacy := "closed" // open to all team members.
+		// Now we can handle the create team logic.
+		_, _, err = g.client.Teams.CreateTeam(ctx, g.owner, github.NewTeam{
+			Name:    slug,
+			Privacy: &privacy,
+		})
+		if err != nil {
+			return fmt.Errorf("create team slug %s: %v", slug, err)
 		}
 	}
 	return nil

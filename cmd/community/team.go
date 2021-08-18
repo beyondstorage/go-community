@@ -22,10 +22,16 @@ var teamSyncCmd = &cli.Command{
 	Name: "sync",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
-			Name:     "path",
+			Name:     "teams",
 			Usage:    "path to the teams.toml",
 			Required: true,
 			Value:    "teams.toml",
+		},
+		&cli.StringFlag{
+			Name:     "projects",
+			Usage:    "path to the projects.toml",
+			Required: true,
+			Value:    "projects.toml",
 		},
 		&cli.StringFlag{
 			Name:     "owner",
@@ -45,6 +51,8 @@ var teamSyncCmd = &cli.Command{
 		},
 	},
 	Action: func(c *cli.Context) (err error) {
+		ctx := context.Background()
+
 		g, err := services.NewGithub(
 			c.String("owner"),
 			c.String("token"))
@@ -52,12 +60,27 @@ var teamSyncCmd = &cli.Command{
 			return
 		}
 
-		team, err := model.LoadTeams(c.String("path"))
+		team, err := model.LoadTeams(c.String("teams"))
 		if err != nil {
 			return
 		}
 
-		err = g.SyncTeam(context.Background(), team)
+		projects, err := model.LoadProjects(c.String("projects"))
+		if err != nil {
+			return
+		}
+
+		repos, err := g.ListRepos(ctx)
+		if err != nil {
+			return
+		}
+
+		err = g.SyncTeam(ctx, team, projects, repos)
+		if err != nil {
+			return
+		}
+
+		err = g.SyncContributors(ctx, team, repos)
 		if err != nil {
 			return
 		}

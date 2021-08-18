@@ -7,22 +7,19 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-type Teams map[string]Team
+type Projects map[string]Project
 
-type Team struct {
-	Repos   []string
-	Project string
-	Role    Role
-	Members []string
+type Project struct {
+	Repos []string
 }
 
-func LoadTeams(path string) (Teams, error) {
+func LoadProjects(path string) (Projects, error) {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read file %s: %v", path, err)
 	}
 
-	var x Teams
+	var x Projects
 	err = toml.Unmarshal(data, &x)
 	if err != nil {
 		return nil, fmt.Errorf("toml unmarshal: %v", err)

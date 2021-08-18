@@ -286,11 +286,19 @@ func (g *Github) SyncContributors(ctx context.Context, teams model.Teams, repos 
 		if exist {
 			continue
 		}
+		// We will ignore all bot account.
+		if g.isBot(v) {
+			continue
+		}
 		_, _, err = g.client.Organizations.CreateOrgInvitation(ctx, g.owner, &github.CreateOrgInvitationOptions{
 			InviteeID: github.Int64(id),
 			Role:      github.String("direct_member"),
+			TeamID:    []int64{},
 		})
 		if err != nil {
+			g.logger.Error("create invite for org",
+				zap.String("login", v),
+				zap.Int64("id", id))
 			return fmt.Errorf("create invite: %w", err)
 		}
 	}
@@ -312,7 +320,7 @@ func (g *Github) GenerateReportDataByRepo(ctx context.Context, org, repo string)
 
 	for _, v := range events {
 		// skip events committed by bot
-		if g.isBot(v.GetActor()) {
+		if g.isBot(v.GetActor().GetLogin()) {
 			continue
 		}
 		// add user info into dict
@@ -531,10 +539,9 @@ func (g *Github) setupTeams(ctx context.Context, teams model.Teams) (err error) 
 	return nil
 }
 
-func (g *Github) isBot(user *github.User) bool {
-	switch user.GetLogin() {
-	// for now, we introduced three bot
-	case "dependabot[bot]", "github-actions[bot]", "BeyondRobot":
+func (g *Github) isBot(login string) bool {
+	switch login {
+	case "dependabot[bot]", "github-actions[bot]", "BeyondRobot", "dependabot-preview[bot]", "gitter-badger":
 		return true
 	default:
 		return false

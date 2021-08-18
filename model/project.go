@@ -2,8 +2,9 @@ package model
 
 import (
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"io/ioutil"
+
+	"github.com/BurntSushi/toml"
 )
 
 type Projects map[string]Project

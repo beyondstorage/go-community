@@ -3,11 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/gobwas/glob"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/gobwas/glob"
 	"github.com/google/go-github/v35/github"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"

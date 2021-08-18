@@ -1,8 +1,10 @@
-[specs]
-repos = [
-    "specs"
-]
-[specs.members]
-leader = [
-    "example"
+[pmc]
+repos = ["*"]
+role = "admin"
+
+[go-storage-maintainer]
+project = "go-storage"
+role = "maintainer"
+members = [
+    "test-user"
 ]

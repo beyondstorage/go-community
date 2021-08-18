@@ -67,7 +67,7 @@ var trackCmd = &cli.Command{
 			return err
 		}
 
-		repos, err := g.ListRepos(ctx, owner)
+		repos, err := g.ListRepos(ctx)
 		if err != nil {
 			return err
 		}

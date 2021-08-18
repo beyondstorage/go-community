@@ -12,6 +12,12 @@ func TestLoadTeams(t *testing.T) {
 		t.Fatal("load user", err)
 	}
 
-	assert.ElementsMatch(t, []string{"specs"}, x["specs"].Repos)
-	assert.ElementsMatch(t, []string{"example"}, x["specs"].Members[RoleLeader])
+	team := x["pmc"]
+	assert.ElementsMatch(t, []string{"*"}, team.Repos)
+	assert.Equal(t, RoleAdmin, team.Role)
+
+	team = x["go-storage-maintainer"]
+	assert.Equal(t, "go-storage", team.Project)
+	assert.Equal(t, RoleMaintainer, team.Role)
+	assert.ElementsMatch(t, []string{"test-user"}, team.Members)
 }

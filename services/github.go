@@ -541,7 +541,6 @@ func (g *Github) setupTeams(ctx context.Context, teams model.Teams) (err error) 
 
 func (g *Github) isBot(login string) bool {
 	switch login {
-	// for now, we introduced three bot
 	case "dependabot[bot]", "github-actions[bot]", "BeyondRobot", "dependabot-preview[bot]", "gitter-badger":
 		return true
 	default:

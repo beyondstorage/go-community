@@ -81,25 +81,26 @@ func (g *Github) ListRepos(ctx context.Context) ([]string, error) {
 	return rs, nil
 }
 
-func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, projects model.Projects, repos []string) (err error) {
+func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, repos model.Repos, githubRepos []string) (err error) {
 	err = g.setupTeams(ctx, teams)
 	if err != nil {
 		return
 	}
 
+	projects := repos.ParsedProjects()
 	for tn, t := range teams {
 		var teamRepos []string
 		if len(t.Repos) > 0 {
 			teamRepos = t.Repos
 		} else {
-			teamRepos = projects[t.Project].Repos
+			teamRepos = projects[t.Project]
 		}
 
 		expectRepos := make(map[string]struct{})
-		// All repos in teamRepos is a glob, we should expand it.
+		// All githubRepos in teamRepos is a glob, we should expand it.
 		for _, v := range teamRepos {
 			g := glob.MustCompile(v)
-			for _, v := range repos {
+			for _, v := range githubRepos {
 				if !g.Match(v) {
 					continue
 				}
@@ -114,7 +115,7 @@ func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, projects model
 		for {
 			rps, resp, err := g.client.Teams.ListTeamReposBySlug(ctx, g.owner, tn, opt)
 			if err != nil {
-				g.logger.Error("list team repos", zap.Error(err))
+				g.logger.Error("list team githubRepos", zap.Error(err))
 				return err
 			}
 			for _, v := range rps {
@@ -126,7 +127,7 @@ func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, projects model
 			opt.Page = resp.NextPage
 		}
 
-		// Add repos that in expectRepos but not in existRepos.
+		// Add githubRepos that in expectRepos but not in existRepos.
 		for er := range expectRepos {
 			_, exist := existRepos[er]
 			if exist {
@@ -143,7 +144,7 @@ func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, projects model
 				zap.String("repo", er))
 		}
 
-		// Delete repos that in existRepos but not in expectRepos.
+		// Delete githubRepos that in existRepos but not in expectRepos.
 		for er := range existRepos {
 			_, exist := expectRepos[er]
 			if exist {

@@ -28,10 +28,10 @@ var teamSyncCmd = &cli.Command{
 			Value:    "teams.toml",
 		},
 		&cli.StringFlag{
-			Name:     "projects",
-			Usage:    "path to the projects.toml",
+			Name:     "repos",
+			Usage:    "path to the repos.toml",
 			Required: true,
-			Value:    "projects.toml",
+			Value:    "repos.toml",
 		},
 		&cli.StringFlag{
 			Name:     "owner",
@@ -65,22 +65,22 @@ var teamSyncCmd = &cli.Command{
 			return
 		}
 
-		projects, err := model.LoadProjects(c.String("projects"))
+		repos, err := model.LoadRepos(c.String("repos"))
+		if err != nil {
+			return err
+		}
+
+		githubRepos, err := g.ListRepos(ctx)
 		if err != nil {
 			return
 		}
 
-		repos, err := g.ListRepos(ctx)
+		err = g.SyncTeam(ctx, team, repos, githubRepos)
 		if err != nil {
 			return
 		}
 
-		err = g.SyncTeam(ctx, team, projects, repos)
-		if err != nil {
-			return
-		}
-
-		err = g.SyncContributors(ctx, team, repos)
+		err = g.SyncContributors(ctx, team, githubRepos)
 		if err != nil {
 			return
 		}

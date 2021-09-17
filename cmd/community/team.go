@@ -65,17 +65,17 @@ var teamSyncCmd = &cli.Command{
 			return
 		}
 
-		repos, err := model.LoadRepos(c.String("repos"))
-		if err != nil {
-			return err
-		}
-
 		githubRepos, err := g.ListRepos(ctx)
 		if err != nil {
 			return
 		}
 
-		err = g.SyncTeam(ctx, team, repos, githubRepos)
+		repos, err := model.LoadRepos(c.String("repos"), githubRepos)
+		if err != nil {
+			return err
+		}
+
+		err = g.SyncTeam(ctx, team, repos)
 		if err != nil {
 			return
 		}

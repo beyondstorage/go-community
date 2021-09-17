@@ -3,11 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/gobwas/glob"
 	"github.com/google/go-github/v35/github"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -69,7 +69,6 @@ func (g *Github) ListRepos(ctx context.Context) ([]string, error) {
 				g.logger.Info("ignore archived repo", zap.String("repo", v.GetName()))
 			}
 			rs = append(rs, v.GetName())
-			g.logger.Info("repo", zap.String("repo", v.GetName()))
 		}
 
 		if resp.NextPage == 0 {
@@ -78,10 +77,11 @@ func (g *Github) ListRepos(ctx context.Context) ([]string, error) {
 		opt.Page = resp.NextPage
 	}
 
+	g.logger.Info("all repo has been listed")
 	return rs, nil
 }
 
-func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, repos model.Repos, githubRepos []string) (err error) {
+func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, repos model.Repos) (err error) {
 	err = g.setupTeams(ctx, teams)
 	if err != nil {
 		return
@@ -89,23 +89,9 @@ func (g *Github) SyncTeam(ctx context.Context, teams model.Teams, repos model.Re
 
 	projects := repos.ParsedProjects()
 	for tn, t := range teams {
-		var teamRepos []string
-		if len(t.Repos) > 0 {
-			teamRepos = t.Repos
-		} else {
-			teamRepos = projects[t.Project]
-		}
-
 		expectRepos := make(map[string]struct{})
-		// All githubRepos in teamRepos is a glob, we should expand it.
-		for _, v := range teamRepos {
-			g := glob.MustCompile(v)
-			for _, v := range githubRepos {
-				if !g.Match(v) {
-					continue
-				}
-				expectRepos[v] = struct{}{}
-			}
+		for _, v := range projects[t.Project] {
+			expectRepos[v] = struct{}{}
 		}
 
 		existRepos := make(map[string]struct{})
@@ -303,6 +289,143 @@ func (g *Github) SyncContributors(ctx context.Context, teams model.Teams, repos 
 			return fmt.Errorf("create invite: %w", err)
 		}
 	}
+	return nil
+}
+
+func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model.Repos) (err error) {
+	for _, repo := range repos {
+		baseref, _, err := g.client.Git.GetRef(ctx, g.owner, repo.Name, "heads/master")
+		if err != nil {
+			g.logger.Error("get base ref", zap.Error(err))
+			return err
+		}
+
+		newBranch := fmt.Sprintf("sync-actions-%d", time.Now().Unix())
+		newref, _, err := g.client.Git.CreateRef(ctx, g.owner, repo.Name, &github.Reference{
+			Ref:    github.String("heads/" + newBranch),
+			Object: baseref.Object,
+		})
+		if err != nil {
+			g.logger.Error("create new ref", zap.Error(err))
+			return err
+		}
+
+		dc, err := g.listActions(ctx, repo.Name)
+		if err != nil {
+			return err
+		}
+
+		// If check passed, we will store empty string, instead we will store sha.
+		checkResult := make(map[string]string)
+
+		for _, file := range dc {
+			// Ignore all non-file
+			if file.GetType() != "file" || !strings.HasSuffix(file.GetName(), ".yml") {
+				continue
+			}
+			basename := strings.TrimSuffix(file.GetName(), ".yml")
+
+			// We will keep all allowed actions untouched.
+			if repo.Action.IsAllowed(basename) {
+				g.logger.Info("ignore allowed actions",
+					zap.String("repo", repo.Name),
+					zap.String("name", basename))
+				continue
+			}
+			// Check action required actions.
+			if repo.Action.IsRequired(basename) {
+				// Check file content.
+				ra, err := file.GetContent()
+				if err != nil {
+					g.logger.Error("get repo content", zap.Error(err))
+					return err
+				}
+				// Read local action files.
+				actionFile := fmt.Sprintf("%s/%s.yml", actionPath, basename)
+				bs, err := ioutil.ReadFile(actionFile)
+				if err != nil {
+					g.logger.Error("read local actions",
+						zap.String("path", actionFile), zap.Error(err))
+					return err
+				}
+				if ra == string(bs) {
+					checkResult[basename] = ""
+				} else {
+					checkResult[basename] = file.GetSHA()
+				}
+				continue
+			}
+			// Other actions should be removed.
+			_, _, err = g.client.Repositories.DeleteFile(ctx, g.owner, repo.Name, file.GetPath(), &github.RepositoryContentFileOptions{
+				Message:   github.String("Delete not allowed file"),
+				SHA:       file.SHA,
+				Branch:    github.String(newBranch),
+				Author:    g.getCommitter(),
+				Committer: g.getCommitter(),
+			})
+			if err != nil {
+				g.logger.Error("delete file", zap.Error(err))
+				return err
+			}
+			g.logger.Info("remove not allowed files",
+				zap.String("repo", repo.Name),
+				zap.String("name", file.GetName()))
+		}
+
+		for _, name := range repo.Action.Required {
+			// The file has been checked.
+			sha, ok := checkResult[name]
+			if ok && sha == "" {
+				continue
+			}
+
+			actionFile := fmt.Sprintf("%s/%s.yml", actionPath, name)
+			bs, err := ioutil.ReadFile(actionFile)
+			if err != nil {
+				g.logger.Error("read local actions",
+					zap.String("path", actionPath+"/"+name), zap.Error(err))
+				return err
+			}
+
+			rcf := &github.RepositoryContentFileOptions{
+				Message:   github.String("Add new file"),
+				Content:   bs,
+				Branch:    github.String(newBranch),
+				Author:    g.getCommitter(),
+				Committer: g.getCommitter(),
+			}
+			if sha != "" {
+				// If sha is empty, we are creating files, or we are updating files.
+				rcf.SHA = github.String(sha)
+			}
+
+			filePath := fmt.Sprintf(".github/workflows/%s.yml", name)
+			_, _, err = g.client.Repositories.CreateFile(ctx, g.owner, repo.Name, filePath, rcf)
+			if err != nil {
+				g.logger.Error("write new files",
+					zap.String("path", filePath),
+					zap.String("branch", newBranch),
+					zap.Error(err))
+				return err
+			}
+
+			g.logger.Info("add required files",
+				zap.String("repo", repo.Name),
+				zap.String("name", filePath))
+		}
+
+		_, _, err = g.client.PullRequests.Create(ctx, g.owner, repo.Name, &github.NewPullRequest{
+			Title:               github.String("ci: Sync github actions"),
+			Head:                newref.Ref,
+			Base:                baseref.Ref,
+			MaintainerCanModify: github.Bool(true),
+		})
+		if err != nil {
+			g.logger.Error("create pull request", zap.Error(err))
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -538,6 +661,26 @@ func (g *Github) setupTeams(ctx context.Context, teams model.Teams) (err error) 
 		}
 	}
 	return nil
+}
+
+func (g *Github) listActions(ctx context.Context, repo string) (dc []*github.RepositoryContent, err error) {
+	_, dc, _, err = g.client.Repositories.GetContents(ctx, g.owner, repo, ".github/workflows", nil)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (g *Github) getCommitter() *github.CommitAuthor {
+	now := time.Now()
+
+	return &github.CommitAuthor{
+		Date: &now,
+		// TODO: we need to get from env
+		Name:  github.String("BeyondRobot"),
+		Email: github.String("robot@beyondstorage.io"),
+		Login: github.String("BeyondRobot"),
+	}
 }
 
 func (g *Github) isBot(login string) bool {

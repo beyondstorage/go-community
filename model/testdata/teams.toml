@@ -1,5 +1,4 @@
 [pmc]
-repos = ["*"]
 role = "admin"
 
 [go-storage-maintainer]

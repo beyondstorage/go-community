@@ -1,89 +1,12 @@
-[site]
-project = ["beyond-tp", "go-storage"]
+["*"]
+project = ["root"]
 
-[beyond-tp]
-project = ["beyond-tp"]
+["t*"]
+project = ["next-root"]
 
-[beyond-tp.action]
-required = [
-    "build-test",
-    "unit-test",
-    "auto-merge",
-]
-allowed = [
-    "integration-test",
-]
+[test]
+project = ["test-project"]
+[test.action]
+required = ["required"]
+allowed = ["allowed"]
 
-["go-*"]
-project = ["go-storage"]
-
-["go-*".action]
-required = [
-    "build-test",
-    "unit-test",
-    "auto-merge",
-]
-allowed = [
-    "integration-test",
-]
-
-["go-service-*"]
-["go-service-*".action]
-required = [
-    "build-test",
-    "unit-test",
-    "service-auto-merge",
-]
-allowed = [
-    "integration-test",
-]
-
-["go-service-fs".action]
-required = [
-    "build-test",
-    "unit-test",
-    "service-auto-merge",
-]
-allowed = [
-    "cross-build",
-    "integration-test",
-]
-
-[beyond-ctl]
-project = ["go-storage"]
-
-[beyond-ctl.action]
-required = [
-    "build-test",
-    "unit-test",
-    "auto-merge",
-]
-allowed = [
-    "integration-test",
-]
-
-[beyond-fs]
-project = ["go-storage"]
-
-[beyond-fs.action]
-required = [
-    "build-test",
-    "unit-test",
-    "auto-merge",
-]
-allowed = [
-    "integration-test",
-]
-
-[beyond-ftp]
-project = ["go-storage"]
-
-[beyond-ftp.action]
-required = [
-    "build-test",
-    "unit-test",
-    "auto-merge",
-]
-allowed = [
-    "integration-test",
-]

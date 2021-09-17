@@ -10,7 +10,6 @@ import (
 type Teams map[string]Team
 
 type Team struct {
-	Repos   []string
 	Project string
 	Role    Role
 	Members []string

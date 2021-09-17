@@ -294,29 +294,19 @@ func (g *Github) SyncContributors(ctx context.Context, teams model.Teams, repos 
 
 func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model.Repos) (err error) {
 	for _, repo := range repos {
-		baseref, _, err := g.client.Git.GetRef(ctx, g.owner, repo.Name, "heads/master")
-		if err != nil {
-			g.logger.Error("get base ref", zap.Error(err))
-			return err
-		}
-
-		newBranch := fmt.Sprintf("sync-actions-%d", time.Now().Unix())
-		newref, _, err := g.client.Git.CreateRef(ctx, g.owner, repo.Name, &github.Reference{
-			Ref:    github.String("heads/" + newBranch),
-			Object: baseref.Object,
-		})
-		if err != nil {
-			g.logger.Error("create new ref", zap.Error(err))
-			return err
-		}
-
 		dc, err := g.listActions(ctx, repo.Name)
 		if err != nil {
 			return err
 		}
 
-		// If check passed, we will store empty string, instead we will store sha.
-		checkResult := make(map[string]string)
+		// fileToAdd will be filled all required actions.
+		// If check passed, we remove it.
+		// If check failed, we update with old files sha.
+		fileToAdd := make(map[string]string)
+		for _, v := range repo.Action.Required {
+			fileToAdd[v] = ""
+		}
+		fileToRemove := make(map[string]string)
 
 		for _, file := range dc {
 			// Ignore all non-file
@@ -349,16 +339,45 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 					return err
 				}
 				if ra == string(bs) {
-					checkResult[basename] = ""
+					delete(fileToAdd, basename)
 				} else {
-					checkResult[basename] = file.GetSHA()
+					fileToAdd[basename] = file.GetSHA()
 				}
 				continue
 			}
 			// Other actions should be removed.
-			_, _, err = g.client.Repositories.DeleteFile(ctx, g.owner, repo.Name, file.GetPath(), &github.RepositoryContentFileOptions{
+			fileToRemove[basename] = file.GetSHA()
+		}
+
+		if len(fileToRemove) == 0 && len(fileToAdd) == 0 {
+			g.logger.Info("all actions are in sync, finished")
+			return nil
+		}
+
+		baseref, _, err := g.client.Git.GetRef(ctx, g.owner, repo.Name, "heads/master")
+		if err != nil {
+			g.logger.Error("get base ref", zap.Error(err))
+			return err
+		}
+
+		newBranch := fmt.Sprintf("sync-actions-%d", time.Now().Unix())
+		newref, _, err := g.client.Git.CreateRef(ctx, g.owner, repo.Name, &github.Reference{
+			Ref:    github.String("heads/" + newBranch),
+			Object: baseref.Object,
+		})
+		if err != nil {
+			g.logger.Error("create new ref", zap.Error(err))
+			return err
+		}
+
+		// Remove file that need to be removed.
+		for filename, sha := range fileToRemove {
+			sha := sha
+
+			filePath := fmt.Sprintf(".github/workflows/%s.yml", filename)
+			_, _, err = g.client.Repositories.DeleteFile(ctx, g.owner, repo.Name, filePath, &github.RepositoryContentFileOptions{
 				Message:   github.String("Delete not allowed file"),
-				SHA:       file.SHA,
+				SHA:       &sha,
 				Branch:    github.String(newBranch),
 				Author:    g.getCommitter(),
 				Committer: g.getCommitter(),
@@ -369,21 +388,15 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 			}
 			g.logger.Info("remove not allowed files",
 				zap.String("repo", repo.Name),
-				zap.String("name", file.GetName()))
+				zap.String("name", filePath))
 		}
 
-		for _, name := range repo.Action.Required {
-			// The file has been checked.
-			sha, ok := checkResult[name]
-			if ok && sha == "" {
-				continue
-			}
-
-			actionFile := fmt.Sprintf("%s/%s.yml", actionPath, name)
+		for filename, sha := range fileToAdd {
+			actionFile := fmt.Sprintf("%s/%s.yml", actionPath, filename)
 			bs, err := ioutil.ReadFile(actionFile)
 			if err != nil {
 				g.logger.Error("read local actions",
-					zap.String("path", actionPath+"/"+name), zap.Error(err))
+					zap.String("path", actionFile), zap.Error(err))
 				return err
 			}
 
@@ -399,7 +412,7 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 				rcf.SHA = github.String(sha)
 			}
 
-			filePath := fmt.Sprintf(".github/workflows/%s.yml", name)
+			filePath := fmt.Sprintf(".github/workflows/%s.yml", filename)
 			_, _, err = g.client.Repositories.CreateFile(ctx, g.owner, repo.Name, filePath, rcf)
 			if err != nil {
 				g.logger.Error("write new files",

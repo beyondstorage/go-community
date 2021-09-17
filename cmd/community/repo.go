@@ -2,37 +2,24 @@ package main
 
 import (
 	"context"
-
+	"github.com/beyondstorage/go-community/model"
+	"github.com/beyondstorage/go-community/services"
 	"github.com/urfave/cli/v2"
 
 	"github.com/beyondstorage/go-community/env"
-	"github.com/beyondstorage/go-community/model"
-	"github.com/beyondstorage/go-community/services"
 )
 
-var teamCmd = &cli.Command{
-	Name:  "team",
-	Usage: "maintain community teams",
+var repoCmd = &cli.Command{
+	Name:  "repo",
+	Usage: "maintain community repos",
 	Subcommands: []*cli.Command{
-		teamSyncCmd,
+		repoSyncActionsCmd,
 	},
 }
 
-var teamSyncCmd = &cli.Command{
-	Name: "sync",
+var repoSyncActionsCmd = &cli.Command{
+	Name: "sync-actions",
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:     "teams",
-			Usage:    "path to the teams.toml",
-			Required: true,
-			Value:    "teams.toml",
-		},
-		&cli.StringFlag{
-			Name:     "repos",
-			Usage:    "path to the repos.toml",
-			Required: true,
-			Value:    "repos.toml",
-		},
 		&cli.StringFlag{
 			Name:     "owner",
 			Usage:    "github organization name",
@@ -49,6 +36,22 @@ var teamSyncCmd = &cli.Command{
 				env.GithubAccessToken,
 			},
 		},
+		&cli.StringFlag{
+			Name:     "actions",
+			Usage:    "the folder of our actions",
+			Required: true,
+			EnvVars: []string{
+				env.GithubActions,
+			},
+		},
+		&cli.StringFlag{
+			Name:     "repos",
+			Usage:    "the folder of our repos",
+			Required: true,
+			EnvVars: []string{
+				env.GithubRepos,
+			},
+		},
 	},
 	Action: func(c *cli.Context) (err error) {
 		ctx := context.Background()
@@ -56,11 +59,6 @@ var teamSyncCmd = &cli.Command{
 		g, err := services.NewGithub(
 			c.String("owner"),
 			c.String("token"))
-		if err != nil {
-			return
-		}
-
-		team, err := model.LoadTeams(c.String("teams"))
 		if err != nil {
 			return
 		}
@@ -75,15 +73,11 @@ var teamSyncCmd = &cli.Command{
 			return err
 		}
 
-		err = g.SyncTeam(ctx, team, repos)
+		err = g.SyncActions(ctx, c.String("actions"), repos)
 		if err != nil {
 			return
 		}
 
-		err = g.SyncContributors(ctx, team, githubRepos)
-		if err != nil {
-			return
-		}
 		return nil
 	},
 }

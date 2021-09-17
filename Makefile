@@ -13,26 +13,18 @@ help:
 check: vet
 
 format:
-	@echo "go fmt"
-	@go fmt ./...
-	@echo "ok"
+	go fmt ./...
 
 vet:
-	@echo "go vet"
-	@go vet ./...
-	@echo "ok"
+	go vet ./...
 
 build: tidy format check
-	@echo "build storage"
-	@go build -o bin/community ./cmd/community
-	@echo "ok"
+	go build -o bin/community ./cmd/community
 
 test:
-	@echo "run test"
-	@go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
-	@go tool cover -html="coverage.txt" -o "coverage.html"
-	@echo "ok"
+	go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
+	go tool cover -html="coverage.txt" -o "coverage.html"
 
 tidy:
-	@go mod tidy
-	@go mod verify
+	go mod tidy
+	go mod verify

@@ -1,0 +1,12 @@
+["*"]
+project = ["root"]
+
+["t*"]
+project = ["next-root"]
+
+[test]
+project = ["test-project"]
+[test.action]
+required = ["required"]
+allowed = ["allowed"]
+

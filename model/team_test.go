@@ -13,7 +13,6 @@ func TestLoadTeams(t *testing.T) {
 	}
 
 	team := x["pmc"]
-	assert.ElementsMatch(t, []string{"*"}, team.Repos)
 	assert.Equal(t, RoleAdmin, team.Role)
 
 	team = x["go-storage-maintainer"]

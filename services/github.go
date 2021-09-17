@@ -309,10 +309,6 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 		fileToRemove := make(map[string]string)
 
 		for _, file := range dc {
-			// Ignore all non-file
-			if file.GetType() != "file" || !strings.HasSuffix(file.GetName(), ".yml") {
-				continue
-			}
 			basename := strings.TrimSuffix(file.GetName(), ".yml")
 
 			// We will keep all allowed actions untouched.
@@ -340,8 +336,14 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 				}
 				if ra == string(bs) {
 					delete(fileToAdd, basename)
+					g.logger.Info("action is in sync, ignore",
+						zap.String("repo", repo.Name),
+						zap.String("name", basename))
 				} else {
 					fileToAdd[basename] = file.GetSHA()
+					g.logger.Info("action is out of sync, prepare update",
+						zap.String("repo", repo.Name),
+						zap.String("name", basename))
 				}
 				continue
 			}
@@ -376,7 +378,7 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 
 			filePath := fmt.Sprintf(".github/workflows/%s.yml", filename)
 			_, _, err = g.client.Repositories.DeleteFile(ctx, g.owner, repo.Name, filePath, &github.RepositoryContentFileOptions{
-				Message:   github.String("Delete not allowed file"),
+				Message:   github.String("Delete not allowed file: " + filePath),
 				SHA:       &sha,
 				Branch:    github.String(newBranch),
 				Author:    g.getCommitter(),
@@ -392,6 +394,8 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 		}
 
 		for filename, sha := range fileToAdd {
+			sha := sha
+
 			actionFile := fmt.Sprintf("%s/%s.yml", actionPath, filename)
 			bs, err := ioutil.ReadFile(actionFile)
 			if err != nil {
@@ -400,8 +404,10 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 				return err
 			}
 
+			filePath := fmt.Sprintf(".github/workflows/%s.yml", filename)
+
 			rcf := &github.RepositoryContentFileOptions{
-				Message:   github.String("Add new file"),
+				Message:   github.String("Add new file: " + filePath),
 				Content:   bs,
 				Branch:    github.String(newBranch),
 				Author:    g.getCommitter(),
@@ -412,7 +418,6 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 				rcf.SHA = github.String(sha)
 			}
 
-			filePath := fmt.Sprintf(".github/workflows/%s.yml", filename)
 			_, _, err = g.client.Repositories.CreateFile(ctx, g.owner, repo.Name, filePath, rcf)
 			if err != nil {
 				g.logger.Error("write new files",
@@ -424,7 +429,7 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 
 			g.logger.Info("add required files",
 				zap.String("repo", repo.Name),
-				zap.String("name", filePath))
+				zap.String("path", filePath))
 		}
 
 		_, _, err = g.client.PullRequests.Create(ctx, g.owner, repo.Name, &github.NewPullRequest{
@@ -677,9 +682,29 @@ func (g *Github) setupTeams(ctx context.Context, teams model.Teams) (err error) 
 }
 
 func (g *Github) listActions(ctx context.Context, repo string) (dc []*github.RepositoryContent, err error) {
-	_, dc, _, err = g.client.Repositories.GetContents(ctx, g.owner, repo, ".github/workflows", nil)
+	_, idc, _, err := g.client.Repositories.GetContents(ctx, g.owner, repo, ".github/workflows", nil)
 	if err != nil {
-		return
+		g.logger.Error("get folder",
+			zap.String("repo", repo),
+			zap.String("path", ".github/workflows"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	dc = make([]*github.RepositoryContent, 0)
+	for _, file := range idc {
+		if file.GetType() != "file" || !strings.HasSuffix(file.GetName(), ".yml") {
+			continue
+		}
+		fc, _, _, err := g.client.Repositories.GetContents(ctx, g.owner, repo, file.GetPath(), nil)
+		if err != nil {
+			g.logger.Error("get file",
+				zap.String("repo", repo),
+				zap.String("path", file.GetPath()),
+				zap.Error(err))
+			return nil, err
+		}
+		dc = append(dc, fc)
 	}
 	return
 }

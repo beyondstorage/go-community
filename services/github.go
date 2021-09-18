@@ -294,6 +294,12 @@ func (g *Github) SyncContributors(ctx context.Context, teams model.Teams, repos 
 
 func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model.Repos) (err error) {
 	for _, repo := range repos {
+		if len(repo.Action.Required) == 0 {
+			g.logger.Info("repo doesn't have required actions, ignore",
+				zap.String("repo", repo.Name))
+			continue
+		}
+
 		dc, err := g.listActions(ctx, repo.Name)
 		if err != nil {
 			return err
@@ -353,7 +359,7 @@ func (g *Github) SyncActions(ctx context.Context, actionPath string, repos model
 
 		if len(fileToRemove) == 0 && len(fileToAdd) == 0 {
 			g.logger.Info("all actions are in sync, finished")
-			return nil
+			continue
 		}
 
 		baseref, _, err := g.client.Git.GetRef(ctx, g.owner, repo.Name, "heads/master")

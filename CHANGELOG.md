@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.0] - 2021-09-22
+
+### Added
+
+- feat: Implement repo sync-actions (#32)
+
+### Changed
+
+- ci: Sync github actions (#33)
+
+### Fixed
+
+- fix: SyncActions will exit too early
+
 ## [v0.3.2] - 2021-08-18
 
 ### Added
@@ -48,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Hello, world!
 
 [Unreleased]: https://github.com/beyondstorage/go-community/compare/v0.3.2...HEAD
+[v0.4.0]: https://github.com/beyondstorage/go-community/compare/v0.3.2...v0.4.0
 [v0.3.2]: https://github.com/beyondstorage/go-community/compare/v0.3.1...v0.3.2
 [v0.3.1]: https://github.com/beyondstorage/go-community/compare/v0.3.0...v0.3.1
 [v0.3.0]: https://github.com/beyondstorage/go-community/compare/v0.2.0...v0.3.0

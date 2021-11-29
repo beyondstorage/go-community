@@ -729,7 +729,7 @@ func (g *Github) getCommitter() *github.CommitAuthor {
 
 func (g *Github) isBot(login string) bool {
 	switch login {
-	case "dependabot[bot]", "github-actions[bot]", "BeyondRobot", "dependabot-preview[bot]", "gitter-badger":
+	case "dependabot[bot]", "github-actions[bot]", "BeyondRobot", "dependabot-preview[bot]", "gitter-badger", "renovate[bot]":
 		return true
 	default:
 		return false

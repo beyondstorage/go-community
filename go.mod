@@ -11,5 +11,5 @@ require (
 	github.com/urfave/cli/v2 v2.3.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be
-	maunium.net/go/mautrix v0.10.10
+	maunium.net/go/mautrix v0.10.11
 )

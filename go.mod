@@ -3,7 +3,7 @@ module github.com/beyondstorage/go-community
 go 1.15
 
 require (
-	github.com/BurntSushi/toml v1.1.0
+	github.com/BurntSushi/toml v1.2.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/go-github/v35 v35.3.0
 	github.com/pkg/errors v0.9.1 // indirect
